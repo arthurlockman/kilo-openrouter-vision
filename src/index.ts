@@ -187,6 +187,11 @@ function userContext(parts: Part[]): string {
 
 type ToastVariant = "info" | "success" | "warning" | "error"
 
+// Custom event type published to the TUI. Using a non-`tui.toast.show` type
+// lets the `./tui` plugin react without Kilo rendering a visible toast.
+const PROGRESS_EVENT_TYPE = "kilo.openrouter-vision.progress"
+const MARKER = "kilo-openrouter-vision"
+
 function publishProgress(
   client: PluginInput["client"],
   directory: string,
@@ -194,14 +199,11 @@ function publishProgress(
   message: string,
 ): void {
   // Fire-and-forget: a notification must never block or fail the user turn.
-  // Published as a tui.toast.show event so the `./tui` plugin (which renders a
-  // spinner in the session_prompt_right slot) can observe start/stop. duration
-  // 0 dismisses the toast immediately so it doesn't linger alongside the spinner.
   const result = client.tui?.publish?.({
     body: {
-      type: "tui.toast.show",
-      properties: { title: "kilo-openrouter-vision", message, variant, duration: 0 },
-    },
+      type: PROGRESS_EVENT_TYPE,
+      properties: { title: MARKER, message, variant },
+    } as never,
     query: { directory },
   })
   if (result && typeof (result as Promise<unknown>).catch === "function") {

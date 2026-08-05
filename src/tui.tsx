@@ -4,6 +4,7 @@ import { registerSpinner } from "opentui-spinner/solid"
 
 const PLUGIN_ID = "kilo-openrouter-vision"
 const MARKER = "kilo-openrouter-vision"
+const PROGRESS_EVENT_TYPE = "kilo.openrouter-vision.progress"
 const SPINNER_FRAMES = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
 
 // Register the native <spinner> intrinsic (from opentui-spinner) so OPenTUI's
@@ -24,10 +25,20 @@ const plugin: TuiPluginModule = {
   async tui(api) {
     const [busy, setBusy] = createSignal<string | null>(null)
 
-    api.event.on("tui.toast.show", ({ properties }) => {
-      if (properties.title !== MARKER) return
-      setBusy(properties.message.startsWith("Describing") ? properties.message : null)
-    })
+    api.event.on(
+      PROGRESS_EVENT_TYPE as never,
+      (event: {
+        type: string
+        properties: { title?: string; message: string; variant: string }
+      }) => {
+        if (event.properties.title !== MARKER) return
+        setBusy(
+          event.properties.message.startsWith("Describing")
+            ? event.properties.message
+            : null,
+        )
+      },
+    )
 
     api.slots.register({
       order: 0,

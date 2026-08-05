@@ -16,13 +16,18 @@ The plugin checks Kilo's resolved model capabilities before doing anything:
 
 ## Installation
 
-Set the API key in the environment that launches Kilo:
+Install the plugin (installs into the global config):
 
 ```sh
-export OPENROUTER_API_KEY="sk-or-v1-..."
+kilo plugin kilo-openrouter-vision -g
 ```
 
-After the package is published to npm, add it to `kilo.json` or `kilo.jsonc`:
+The installer writes entries to **two** config files under `~/.config/kilo/`:
+
+- `opencode.json` — the **server** plugin, with its options. This is where you must add your API key.
+- `tui.json` — the **TUI-side** plugin (renders the progress spinner). It just lists the package name and needs no options.
+
+After installing, add the API key to the `kilo-openrouter-vision` entry in `~/.config/kilo/opencode.json`:
 
 ```json
 {
@@ -30,14 +35,29 @@ After the package is published to npm, add it to `kilo.json` or `kilo.jsonc`:
     [
       "kilo-openrouter-vision",
       {
-        "model": "qwen/qwen3.7-flash"
+        "model": "qwen/qwen3.7-flash",
+        "apiKeyEnv": "sk-or-v1-..."
       }
     ]
   ]
 }
 ```
 
-For a local checkout, build the package and reference its server entrypoint with an absolute file URL:
+Set the key either via the `apiKeyEnv` option (the key value itself, as shown) or in the environment that launches Kilo (see [Configuration](#configuration)).
+
+The corresponding `~/.config/kilo/tui.json` entry is added automatically by the installer and looks like:
+
+```json
+{
+  "plugin": [
+    "kilo-openrouter-vision"
+  ]
+}
+```
+
+Restart Kilo after installing or changing plugin configuration.
+
+For a local checkout, build the package and reference its server entrypoint with an absolute file URL in `opencode.json`:
 
 ```sh
 npm install
@@ -50,14 +70,13 @@ npm run build
     [
       "file:///absolute/path/to/kilo-openrouter-vision/dist/index.js",
       {
-        "model": "qwen/qwen3.7-flash"
+        "model": "qwen/qwen3.7-flash",
+        "apiKeyEnv": "sk-or-v1-..."
       }
     ]
   ]
 }
 ```
-
-Restart Kilo after changing plugin configuration.
 
 ## Configuration
 
@@ -70,7 +89,7 @@ Restart Kilo after changing plugin configuration.
 | `maxTokens` | `1200` | Maximum description output tokens per image. |
 | `maxImageBytes` | `5242880` | Maximum decoded size for pasted base64 images. |
 | `zeroDataRetention` | `true` | Restrict routing to OpenRouter endpoints with a zero-data-retention policy. |
-| `showProgress` | `true` | Show start/success/error toasts in the Kilo TUI while an image is being described. |
+| `showProgress` | `true` | Show a live spinner in the Kilo TUI while an image is being described. |
 
 Example with all options:
 
@@ -98,7 +117,7 @@ OpenRouter's ZDR restriction can reduce model or provider availability. Set `zer
 
 When `showProgress` is enabled (default), the plugin shows a live spinner in the Kilo TUI while an image is being described. This requires the TUI-side module, which ships automatically with the same package — no extra configuration.
 
-- The **server** plugin publishes `tui.toast.show` events (`client.tui.publish`) when it starts describing an image and again when it finishes (success/warning). These also surface as status toasts.
+- The **server** plugin publishes `tui.toast.show` events (`client.tui.publish`) when it starts describing an image and again when it finishes (success/warning). The toast is dismissed immediately (`duration: 0`), so only the spinner is visible.
 - The **TUI** plugin (`./tui`) subscribes to those events via `api.event.on` and renders a spin indicator in the `session_prompt_right` slot next to the prompt, clearing it as soon as the description completes.
 
 If you don't use the TUI, or want to avoid any UI notifications, set `showProgress` to `false`.
