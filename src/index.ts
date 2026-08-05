@@ -195,12 +195,12 @@ function publishProgress(
 ): void {
   // Fire-and-forget: a notification must never block or fail the user turn.
   // Published as a tui.toast.show event so the `./tui` plugin (which renders a
-  // spinner in the session_prompt_right slot) can observe start/stop, and a
-  // toast is surfaced in the TUI for contexts without the TUI plugin.
+  // spinner in the session_prompt_right slot) can observe start/stop. duration
+  // 0 dismisses the toast immediately so it doesn't linger alongside the spinner.
   const result = client.tui?.publish?.({
     body: {
       type: "tui.toast.show",
-      properties: { title: "kilo-openrouter-vision", message, variant },
+      properties: { title: "kilo-openrouter-vision", message, variant, duration: 0 },
     },
     query: { directory },
   })
