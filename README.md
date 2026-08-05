@@ -123,7 +123,7 @@ OpenRouter's ZDR restriction can reduce model or provider availability. Set `zer
 
 When `showProgress` is enabled (default), the plugin shows a live spinner in the Kilo TUI while an image is being described. This requires the TUI-side module, which ships automatically with the same package — no extra configuration.
 
-- The **server** plugin publishes `tui.toast.show` events (`client.tui.publish`) when it starts describing an image and again when it finishes (success/warning). The toast is dismissed immediately (`duration: 0`), so only the spinner is visible.
+- The **server** plugin publishes `tui.command.execute` events (`client.tui.publish`) when it starts describing an image and again when it finishes, using a namespaced command string (`kilo.openrouter-vision:...`). This rides the whitelisted non-toast channel, so no visible toast is shown.
 - The **TUI** plugin (`./tui`) subscribes to those events via `api.event.on` and renders a spin indicator in the `session_prompt_right` slot next to the prompt, clearing it as soon as the description completes.
 
 If you don't use the TUI, or want to avoid any UI notifications, set `showProgress` to `false`.

@@ -12,11 +12,7 @@ import {
 
 const selected = { providerID: "test", modelID: "model" }
 
-type ToastProperties = {
-  title?: string
-  message: string
-  variant: "info" | "success" | "warning" | "error"
-}
+type ToastProperties = { command: string }
 type PublishOptions = {
   body: { type: string; properties: ToastProperties }
   query?: { directory?: string }
@@ -205,7 +201,7 @@ describe("capability routing", () => {
     expect(fetchImpl).not.toHaveBeenCalled()
   })
 
-  it("shows progress toasts around a successful description", async () => {
+  it("publishes command start/stop progress signals around a successful description", async () => {
     const fetchImpl = vi.fn<typeof fetch>().mockResolvedValue(
       new Response(
         JSON.stringify({ choices: [{ message: { content: "A compiler error." } }] }),
@@ -217,18 +213,13 @@ describe("capability routing", () => {
 
     await runHook([provider(false)], parts, fetchImpl, undefined, { publish })
 
-    const calls = publish.mock.calls.map((c) => c[0].body.properties)
-    expect(calls[0]).toMatchObject({
-      variant: "info",
-      message: expect.stringContaining("Describing an image via"),
-    })
-    expect(calls[1]).toMatchObject({
-      variant: "success",
-      message: expect.stringContaining("Image description ready"),
-    })
+    const commands = publish.mock.calls.map((c) => c[0].body.properties.command)
+    expect(commands[0]).toContain("kilo.openrouter-vision:")
+    expect(decodeURIComponent(commands[0]!)).toContain("Describing an image via")
+    expect(commands[commands.length - 1]).toBe("kilo.openrouter-vision:end")
   })
 
-  it("shows a warning toast when a description fails", async () => {
+  it("publishes an end signal when a description fails", async () => {
     const fetchImpl = vi.fn<typeof fetch>().mockResolvedValue(
       new Response(JSON.stringify({ error: { message: "boom" } }), { status: 500 }),
     )
@@ -237,11 +228,8 @@ describe("capability routing", () => {
 
     await runHook([provider(false)], parts, fetchImpl, undefined, { publish })
 
-    const calls = publish.mock.calls.map((c) => c[0].body.properties)
-    expect(calls[calls.length - 1]).toMatchObject({
-      variant: "warning",
-      message: expect.stringContaining("failed for 1 of 1"),
-    })
+    const commands = publish.mock.calls.map((c) => c[0].body.properties.command)
+    expect(commands[commands.length - 1]).toBe("kilo.openrouter-vision:end")
   })
 
   it("does not show toasts when showProgress is disabled", async () => {

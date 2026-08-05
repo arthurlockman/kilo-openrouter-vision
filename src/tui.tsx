@@ -3,9 +3,8 @@ import { createSignal, Show, type JSX } from "solid-js"
 import { registerSpinner } from "opentui-spinner/solid"
 
 const PLUGIN_ID = "kilo-openrouter-vision"
-const MARKER = "kilo-openrouter-vision"
-const PROGRESS_EVENT_TYPE = "kilo.openrouter-vision.progress"
 const SPINNER_FRAMES = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
+const COMMAND_PREFIX = "kilo.openrouter-vision:"
 
 // Register the native <spinner> intrinsic (from opentui-spinner) so OPenTUI's
 // animation engine drives the frames — a plain signal/timer does not repaint.
@@ -26,17 +25,13 @@ const plugin: TuiPluginModule = {
     const [busy, setBusy] = createSignal<string | null>(null)
 
     api.event.on(
-      PROGRESS_EVENT_TYPE as never,
-      (event: {
-        type: string
-        properties: { title?: string; message: string; variant: string }
-      }) => {
-        if (event.properties.title !== MARKER) return
-        setBusy(
-          event.properties.message.startsWith("Describing")
-            ? event.properties.message
-            : null,
-        )
+      "tui.command.execute" as never,
+      (event: { type: string; properties: { command: string } }) => {
+        const command = event.properties.command
+        if (!command.startsWith(COMMAND_PREFIX)) return
+        const payload = command.slice(COMMAND_PREFIX.length)
+        if (payload === "end") setBusy(null)
+        else setBusy(decodeURIComponent(payload))
       },
     )
 

@@ -185,24 +185,31 @@ function userContext(parts: Part[]): string {
     .slice(0, 8_000)
 }
 
-type ToastVariant = "info" | "success" | "warning" | "error"
+type ProgressState = "start" | "end"
 
-// Custom event type published to the TUI. Using a non-`tui.toast.show` type
-// lets the `./tui` plugin react without Kilo rendering a visible toast.
-const PROGRESS_EVENT_TYPE = "kilo.openrouter-vision.progress"
-const MARKER = "kilo-openrouter-vision"
+// The server whitelists only a fixed set of TUI publish event types
+// (tui.prompt.append / tui.command.execute / tui.toast.show), so a custom
+// event type is dropped and tui.toast.show renders a visible toast (its
+// duration is a positive int, so 0 also fails). tui.command.execute accepts an
+// arbitrary string command and renders no toast, so we use it to signal the
+// `./tui` plugin without a toast.
+const PROGRESS_COMMAND_PREFIX = "kilo.openrouter-vision:"
 
 function publishProgress(
   client: PluginInput["client"],
   directory: string,
-  variant: ToastVariant,
+  state: ProgressState,
   message: string,
 ): void {
   // Fire-and-forget: a notification must never block or fail the user turn.
+  const command =
+    state === "start"
+      ? `${PROGRESS_COMMAND_PREFIX}${encodeURIComponent(message)}`
+      : `${PROGRESS_COMMAND_PREFIX}end`
   const result = client.tui?.publish?.({
     body: {
-      type: PROGRESS_EVENT_TYPE,
-      properties: { title: MARKER, message, variant },
+      type: "tui.command.execute",
+      properties: { command },
     } as never,
     query: { directory },
   })
@@ -395,7 +402,7 @@ export function createOpenRouterVisionPlugin(
           publishProgress(
             client,
             directory,
-            "info",
+            "start",
             `Describing ${images.length === 1 ? "an image" : `${images.length} images`} via ${options.model}…`,
           )
         }
@@ -434,14 +441,14 @@ export function createOpenRouterVisionPlugin(
             publishProgress(
               client,
               directory,
-              "warning",
+              "end",
               `Image description failed for ${failed} of ${replacements.length} image(s) in ${seconds}s.`,
             )
           } else {
             publishProgress(
               client,
               directory,
-              "success",
+              "end",
               `Image description ready in ${seconds}s.`,
             )
           }
