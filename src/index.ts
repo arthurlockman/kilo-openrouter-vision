@@ -30,6 +30,7 @@ type TextPart = Extract<Part, { type: "text" }>
 
 export interface VisionPluginOptions extends PluginOptions {
   model?: string
+  apiKey?: string
   apiKeyEnv?: string
   timeoutMs?: number
   maxTokens?: number
@@ -39,6 +40,7 @@ export interface VisionPluginOptions extends PluginOptions {
 
 export interface ResolvedOptions {
   model: string
+  apiKey?: string
   apiKeyEnv: string
   timeoutMs: number
   maxTokens: number
@@ -84,6 +86,7 @@ function positiveNumber(value: unknown, fallback: number, option: string): numbe
 export function resolveOptions(raw: PluginOptions = {}): ResolvedOptions {
   return {
     model: typeof raw.model === "string" ? raw.model : DEFAULT_MODEL,
+    ...(typeof raw.apiKey === "string" ? { apiKey: raw.apiKey } : {}),
     apiKeyEnv:
       typeof raw.apiKeyEnv === "string" ? raw.apiKeyEnv : "OPENROUTER_API_KEY",
     timeoutMs: positiveNumber(raw.timeoutMs, DEFAULT_TIMEOUT_MS, "timeoutMs"),
@@ -95,6 +98,18 @@ export function resolveOptions(raw: PluginOptions = {}): ResolvedOptions {
     ),
     zeroDataRetention: raw.zeroDataRetention !== false,
   }
+}
+
+export function resolveApiKey(
+  options: Pick<ResolvedOptions, "apiKey" | "apiKeyEnv">,
+  env: NodeJS.ProcessEnv,
+): string | undefined {
+  if (options.apiKey) return options.apiKey
+
+  // Compatibility with 0.1.0 configurations that put the key value here.
+  if (options.apiKeyEnv.startsWith("sk-")) return options.apiKeyEnv
+
+  return env[options.apiKeyEnv]
 }
 
 export function findSelectedModel(
@@ -276,6 +291,30 @@ function descriptionPart(
   }
 }
 
+function errorPart(image: ImagePart, error: unknown): TextPart {
+  const label = image.filename ? JSON.stringify(image.filename) : "pasted image"
+  const message = error instanceof Error ? error.message : "Unknown vision error"
+  return {
+    id: image.id,
+    sessionID: image.sessionID,
+    messageID: image.messageID,
+    type: "text",
+    synthetic: true,
+    text: [
+      `[Vision preprocessing failed for ${label}]`,
+      message,
+      "The original image was not sent to the selected text-only model.",
+    ].join("\n"),
+    metadata: {
+      openRouterVision: {
+        error: true,
+        originalMime: image.mime,
+        ...(image.filename ? { filename: image.filename } : {}),
+      },
+    },
+  }
+}
+
 export function createOpenRouterVisionPlugin(
   dependencies: PluginDependencies = {},
 ): Plugin {
@@ -296,31 +335,44 @@ export function createOpenRouterVisionPlugin(
 
         if (images.length === 0) return
 
-        const providerResponse = await client.config.providers({ throwOnError: true })
-        const selectedModel = findSelectedModel(
-          providerResponse.data.providers,
-          output.message.model,
-        )
+        let selectedModel: Model
+        try {
+          const providerResponse = await client.config.providers({ throwOnError: true })
+          selectedModel = findSelectedModel(
+            providerResponse.data.providers,
+            output.message.model,
+          )
+        } catch (error) {
+          for (const image of images) {
+            output.parts[image.index] = errorPart(image.part, error)
+          }
+          return
+        }
 
         if (selectedModel.capabilities.input.image) return
 
-        const apiKey = env[options.apiKeyEnv]
-        if (!apiKey) {
-          throw new Error(
-            `${options.apiKeyEnv} is required because ${selectedModel.providerID}/${selectedModel.id} does not support image input`,
-          )
-        }
-
         const context = userContext(output.parts)
+        const apiKey = resolveApiKey(options, env)
         const replacements = await Promise.all(
-          images.map(async ({ part, index }) => ({
-            index,
-            part: descriptionPart(
-              part,
-              await describeImage({ part, context, options, apiKey, fetchImpl }),
-              options.model,
-            ),
-          })),
+          images.map(async ({ part, index }) => {
+            try {
+              if (!apiKey) {
+                throw new Error(
+                  "OpenRouter API key is not configured. Set OPENROUTER_API_KEY or configure apiKeyEnv.",
+                )
+              }
+              return {
+                index,
+                part: descriptionPart(
+                  part,
+                  await describeImage({ part, context, options, apiKey, fetchImpl }),
+                  options.model,
+                ),
+              }
+            } catch (error) {
+              return { index, part: errorPart(part, error) }
+            }
+          }),
         )
 
         for (const replacement of replacements) {

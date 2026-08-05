@@ -64,6 +64,7 @@ Restart Kilo after changing plugin configuration.
 | Option | Default | Description |
 | --- | --- | --- |
 | `model` | `qwen/qwen3.7-flash` | OpenRouter vision model used for descriptions. |
+| `apiKey` | unset | OpenRouter API key supplied directly. Prefer `apiKeyEnv` to keep secrets out of configuration. |
 | `apiKeyEnv` | `OPENROUTER_API_KEY` | Environment variable containing the OpenRouter API key. |
 | `timeoutMs` | `30000` | OpenRouter request timeout in milliseconds. |
 | `maxTokens` | `1200` | Maximum description output tokens per image. |
@@ -108,7 +109,7 @@ Pasted images are normally represented by Kilo as base64 data URLs. HTTP and HTT
 - Zero-data-retention routing is enabled by default.
 - Base64 image content is not logged by the plugin.
 - Text extracted from images is explicitly marked as untrusted content to reduce prompt-injection risk.
-- Multiple images are transformed atomically: if any description fails, the original message parts remain unchanged.
+- Vision failures are inserted as visible synthetic text instead of rejecting and losing the user turn.
 
 ## Development
 
@@ -118,7 +119,7 @@ npm run check
 npm pack --dry-run
 ```
 
-The test suite covers capability routing, API-key behavior, image validation, request construction, model resolution, and atomic multi-image failure handling.
+The test suite covers capability routing, API-key behavior, image validation, request construction, model resolution, and visible failure handling.
 
 ## Releasing
 

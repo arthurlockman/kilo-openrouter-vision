@@ -1,6 +1,6 @@
 {
   "name": "kilo-openrouter-vision",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Kilo plugin that describes pasted images with OpenRouter for text-only models.",
   "type": "module",
   "main": "./dist/index.js",

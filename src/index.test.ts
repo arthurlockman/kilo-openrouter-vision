@@ -6,6 +6,7 @@ import {
   createOpenRouterVisionPlugin,
   findSelectedModel,
   normalizeImageUrl,
+  resolveApiKey,
   resolveOptions,
 } from "./index.js"
 
@@ -152,7 +153,7 @@ describe("capability routing", () => {
     expect(body.provider).toEqual({ zdr: true })
   })
 
-  it("does not partially mutate when one image request fails", async () => {
+  it("replaces a failed image with visible error text", async () => {
     const fetchImpl = vi
       .fn<typeof fetch>()
       .mockResolvedValueOnce(
@@ -167,10 +168,17 @@ describe("capability routing", () => {
         }),
       )
     const parts: Part[] = [imagePart("first"), imagePart("second")]
-    const before = structuredClone(parts)
+    await runHook([provider(false)], parts, fetchImpl)
 
-    await expect(runHook([provider(false)], parts, fetchImpl)).rejects.toThrow("failed")
-    expect(parts).toEqual(before)
+    expect(parts[0]).toMatchObject({
+      type: "text",
+      text: expect.stringContaining("First image"),
+    })
+    expect(parts[1]).toMatchObject({
+      type: "text",
+      synthetic: true,
+      text: expect.stringContaining("Vision preprocessing failed"),
+    })
   })
 
   it("does not require an API key when there is no image", async () => {
@@ -198,10 +206,28 @@ describe("capability routing", () => {
     expect(parts).toEqual([file])
   })
 
-  it("requires an API key for text-only models", async () => {
-    await expect(
-      runHook([provider(false)], [imagePart()], vi.fn<typeof fetch>(), {}),
-    ).rejects.toThrow("OPENROUTER_API_KEY is required")
+  it("preserves the turn as error text when the API key is missing", async () => {
+    const parts: Part[] = [imagePart()]
+
+    await runHook([provider(false)], parts, vi.fn<typeof fetch>(), {})
+
+    expect(parts[0]).toMatchObject({
+      type: "text",
+      synthetic: true,
+      text: expect.stringContaining("OpenRouter API key is not configured"),
+    })
+  })
+
+  it("preserves the turn when selected model metadata is unavailable", async () => {
+    const parts: Part[] = [imagePart()]
+
+    await runHook([], parts, vi.fn<typeof fetch>())
+
+    expect(parts[0]).toMatchObject({
+      type: "text",
+      synthetic: true,
+      text: expect.stringContaining("Cannot resolve selected Kilo model"),
+    })
   })
 })
 
@@ -241,5 +267,15 @@ describe("helpers", () => {
     expect(() => resolveOptions({ timeoutMs: 0 })).toThrow(
       "timeoutMs must be a positive number",
     )
+  })
+
+  it("resolves an explicit API key", () => {
+    expect(resolveApiKey({ apiKey: "secret", apiKeyEnv: "IGNORED" }, {})).toBe(
+      "secret",
+    )
+  })
+
+  it("supports 0.1.0 configs that put the key in apiKeyEnv", () => {
+    expect(resolveApiKey({ apiKeyEnv: "sk-legacy" }, {})).toBe("sk-legacy")
   })
 })
