@@ -120,6 +120,22 @@ npm pack --dry-run
 
 The test suite covers capability routing, API-key behavior, image validation, request construction, model resolution, and atomic multi-image failure handling.
 
+## Releasing
+
+Future releases publish from GitHub Actions through npm trusted publishing:
+
+1. Update the version in `package.json` and `package-lock.json` with `npm version`.
+2. Push the commit and generated `vX.Y.Z` tag.
+3. The `publish.yml` workflow verifies the tag, runs all checks, and publishes to npm with provenance.
+
+Configure the package's trusted publisher on npm with:
+
+- Provider: GitHub Actions
+- Organization or user: `arthurlockman`
+- Repository: `kilo-openrouter-vision`
+- Workflow filename: `publish.yml`
+- Allowed action: `npm publish`
+
 ## License
 
 MIT
