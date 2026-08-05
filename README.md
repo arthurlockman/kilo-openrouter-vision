@@ -57,6 +57,12 @@ The corresponding `~/.config/kilo/tui.json` entry is added automatically by the 
 
 Restart Kilo after installing or changing plugin configuration.
 
+To update to a newer published version, clear the cached copy and restart (Kilo re-downloads it):
+
+```sh
+rm -rf ~/.cache/kilo/packages/kilo-openrouter-vision@latest
+````
+
 For a local checkout, build the package and reference its server entrypoint with an absolute file URL in `opencode.json`:
 
 ```sh
