@@ -1,14 +1,17 @@
 import type { TuiPluginModule } from "@kilocode/plugin/tui"
-import { createSignal, onCleanup, Show, type JSX } from "solid-js"
+import { createSignal, Show, type JSX } from "solid-js"
 
 const PLUGIN_ID = "kilo-openrouter-vision"
 const MARKER = "kilo-openrouter-vision"
 const FRAMES = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
 
+// Module-scope frame clock. Kept outside the component tree so its owner is
+// never disposed by the slot reconciler (which would clear a component-scoped
+// timer and freeze the spinner).
+const [frame, setFrame] = createSignal(0)
+setInterval(() => setFrame((value) => (value + 1) % FRAMES.length), 80)
+
 function Spinner(props: { label: string }): JSX.Element {
-  const [frame, setFrame] = createSignal(0)
-  const timer = setInterval(() => setFrame((value) => (value + 1) % FRAMES.length), 80)
-  onCleanup(() => clearInterval(timer))
   return <text>{FRAMES[frame()]} {props.label}</text>
 }
 
