@@ -1,6 +1,6 @@
 {
   "name": "kilo-openrouter-vision",
-  "version": "0.1.7",
+  "version": "0.1.8",
   "description": "Kilo plugin that describes pasted images with OpenRouter for text-only models.",
   "type": "module",
   "main": "./dist/index.js",
@@ -68,6 +68,7 @@
   "dependencies": {
     "@opentui/core": "^0.5.1",
     "@opentui/solid": "^0.5.1",
+    "opentui-spinner": "^0.0.7",
     "solid-js": "^1.9.12"
   }
 }

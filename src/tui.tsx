@@ -1,18 +1,22 @@
 import type { TuiPluginModule } from "@kilocode/plugin/tui"
 import { createSignal, Show, type JSX } from "solid-js"
+import { registerSpinner } from "opentui-spinner/solid"
 
 const PLUGIN_ID = "kilo-openrouter-vision"
 const MARKER = "kilo-openrouter-vision"
-const FRAMES = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
+const SPINNER_FRAMES = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
 
-// Module-scope frame clock. Kept outside the component tree so its owner is
-// never disposed by the slot reconciler (which would clear a component-scoped
-// timer and freeze the spinner).
-const [frame, setFrame] = createSignal(0)
-setInterval(() => setFrame((value) => (value + 1) % FRAMES.length), 80)
+// Register the native <spinner> intrinsic (from opentui-spinner) so OPenTUI's
+// animation engine drives the frames — a plain signal/timer does not repaint.
+registerSpinner()
 
 function Spinner(props: { label: string }): JSX.Element {
-  return <text>{FRAMES[frame()]} {props.label}</text>
+  return (
+    <box flexDirection="row" gap={1}>
+      <spinner frames={SPINNER_FRAMES} interval={80} />
+      <text>{props.label}</text>
+    </box>
+  )
 }
 
 const plugin: TuiPluginModule = {
