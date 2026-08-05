@@ -12,6 +12,16 @@ import {
 
 const selected = { providerID: "test", modelID: "model" }
 
+type ToastProperties = {
+  title?: string
+  message: string
+  variant: "info" | "success" | "warning" | "error"
+}
+type PublishOptions = {
+  body: { type: string; properties: ToastProperties }
+  query?: { directory?: string }
+}
+
 function model(image: boolean): Model {
   return {
     id: "model",
@@ -78,7 +88,10 @@ function textPart(): Extract<Part, { type: "text" }> {
   }
 }
 
-function pluginInput(providers: Provider[]): PluginInput {
+function pluginInput(
+  providers: Provider[],
+  tui?: { publish: (o: PublishOptions) => Promise<boolean> },
+): PluginInput {
   return {
     client: {
       config: {
@@ -86,6 +99,7 @@ function pluginInput(providers: Provider[]): PluginInput {
           data: { providers, default: {} },
         }),
       },
+      ...(tui ? { tui } : {}),
     } as unknown as PluginInput["client"],
     project: {} as PluginInput["project"],
     directory: "/tmp",
@@ -101,9 +115,10 @@ async function runHook(
   parts: Part[],
   fetchImpl: typeof fetch,
   env: NodeJS.ProcessEnv = { OPENROUTER_API_KEY: "secret" },
+  tui?: { publish: (o: PublishOptions) => Promise<boolean> },
 ): Promise<void> {
   const plugin = createOpenRouterVisionPlugin({ fetchImpl, env })
-  const hooks = await plugin(pluginInput(providers))
+  const hooks = await plugin(pluginInput(providers, tui))
   await hooks["chat.message"]?.(
     { sessionID: "session", model: selected },
     { message: message(), parts },
@@ -190,6 +205,66 @@ describe("capability routing", () => {
     expect(fetchImpl).not.toHaveBeenCalled()
   })
 
+  it("shows progress toasts around a successful description", async () => {
+    const fetchImpl = vi.fn<typeof fetch>().mockResolvedValue(
+      new Response(
+        JSON.stringify({ choices: [{ message: { content: "A compiler error." } }] }),
+        { status: 200 },
+      ),
+    )
+    const publish = vi.fn<(o: PublishOptions) => Promise<boolean>>().mockResolvedValue(true)
+    const parts: Part[] = [textPart(), imagePart()]
+
+    await runHook([provider(false)], parts, fetchImpl, undefined, { publish })
+
+    const calls = publish.mock.calls.map((c) => c[0].body.properties)
+    expect(calls[0]).toMatchObject({
+      variant: "info",
+      message: expect.stringContaining("Describing an image via"),
+    })
+    expect(calls[1]).toMatchObject({
+      variant: "success",
+      message: expect.stringContaining("Image description ready"),
+    })
+  })
+
+  it("shows a warning toast when a description fails", async () => {
+    const fetchImpl = vi.fn<typeof fetch>().mockResolvedValue(
+      new Response(JSON.stringify({ error: { message: "boom" } }), { status: 500 }),
+    )
+    const publish = vi.fn<(o: PublishOptions) => Promise<boolean>>().mockResolvedValue(true)
+    const parts: Part[] = [imagePart()]
+
+    await runHook([provider(false)], parts, fetchImpl, undefined, { publish })
+
+    const calls = publish.mock.calls.map((c) => c[0].body.properties)
+    expect(calls[calls.length - 1]).toMatchObject({
+      variant: "warning",
+      message: expect.stringContaining("failed for 1 of 1"),
+    })
+  })
+
+  it("does not show toasts when showProgress is disabled", async () => {
+    const fetchImpl = vi.fn<typeof fetch>().mockResolvedValue(
+      new Response(
+        JSON.stringify({ choices: [{ message: { content: "desc" } }] }),
+        { status: 200 },
+      ),
+    )
+    const publish = vi.fn<(o: PublishOptions) => Promise<boolean>>().mockResolvedValue(true)
+    const plugin = createOpenRouterVisionPlugin({ fetchImpl })
+    const hooks = await plugin(
+      pluginInput([provider(false)], { publish }),
+      { showProgress: false },
+    )
+    await hooks["chat.message"]?.(
+      { sessionID: "session", model: selected },
+      { message: message(), parts: [imagePart()] },
+    )
+
+    expect(publish).not.toHaveBeenCalled()
+  })
+
   it("ignores non-image file attachments", async () => {
     const fetchImpl = vi.fn<typeof fetch>()
     const file: Extract<Part, { type: "file" }> = {
@@ -267,6 +342,11 @@ describe("helpers", () => {
     expect(() => resolveOptions({ timeoutMs: 0 })).toThrow(
       "timeoutMs must be a positive number",
     )
+  })
+
+  it("defaults showProgress to true and allows disabling it", () => {
+    expect(resolveOptions({}).showProgress).toBe(true)
+    expect(resolveOptions({ showProgress: false }).showProgress).toBe(false)
   })
 
   it("resolves an explicit API key", () => {

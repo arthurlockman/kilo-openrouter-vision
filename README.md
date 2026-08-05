@@ -70,6 +70,7 @@ Restart Kilo after changing plugin configuration.
 | `maxTokens` | `1200` | Maximum description output tokens per image. |
 | `maxImageBytes` | `5242880` | Maximum decoded size for pasted base64 images. |
 | `zeroDataRetention` | `true` | Restrict routing to OpenRouter endpoints with a zero-data-retention policy. |
+| `showProgress` | `true` | Show start/success/error toasts in the Kilo TUI while an image is being described. |
 
 Example with all options:
 
@@ -92,6 +93,15 @@ Example with all options:
 ```
 
 OpenRouter's ZDR restriction can reduce model or provider availability. Set `zeroDataRetention` to `false` only after reviewing the relevant provider privacy policies.
+
+## Progress Indicator (TUI)
+
+When `showProgress` is enabled (default), the plugin shows a live spinner in the Kilo TUI while an image is being described. This requires the TUI-side module, which ships automatically with the same package — no extra configuration.
+
+- The **server** plugin publishes `tui.toast.show` events (`client.tui.publish`) when it starts describing an image and again when it finishes (success/warning). These also surface as status toasts.
+- The **TUI** plugin (`./tui`) subscribes to those events via `api.event.on` and renders a spin indicator in the `session_prompt_right` slot next to the prompt, clearing it as soon as the description completes.
+
+If you don't use the TUI, or want to avoid any UI notifications, set `showProgress` to `false`.
 
 ## Supported Images
 

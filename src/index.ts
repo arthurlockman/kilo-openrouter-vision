@@ -1,4 +1,4 @@
-import type { Plugin, PluginModule, PluginOptions } from "@kilocode/plugin"
+import type { Plugin, PluginInput, PluginModule, PluginOptions } from "@kilocode/plugin"
 import type { Model, Part, Provider } from "@kilocode/sdk"
 
 const DEFAULT_MODEL = "qwen/qwen3.7-flash"
@@ -36,6 +36,7 @@ export interface VisionPluginOptions extends PluginOptions {
   maxTokens?: number
   maxImageBytes?: number
   zeroDataRetention?: boolean
+  showProgress?: boolean
 }
 
 export interface ResolvedOptions {
@@ -46,6 +47,7 @@ export interface ResolvedOptions {
   maxTokens: number
   maxImageBytes: number
   zeroDataRetention: boolean
+  showProgress: boolean
 }
 
 interface OpenRouterResponse {
@@ -97,6 +99,7 @@ export function resolveOptions(raw: PluginOptions = {}): ResolvedOptions {
       "maxImageBytes",
     ),
     zeroDataRetention: raw.zeroDataRetention !== false,
+    showProgress: raw.showProgress !== false,
   }
 }
 
@@ -180,6 +183,30 @@ function userContext(parts: Part[]): string {
     .filter(Boolean)
     .join("\n\n")
     .slice(0, 8_000)
+}
+
+type ToastVariant = "info" | "success" | "warning" | "error"
+
+function publishProgress(
+  client: PluginInput["client"],
+  directory: string,
+  variant: ToastVariant,
+  message: string,
+): void {
+  // Fire-and-forget: a notification must never block or fail the user turn.
+  // Published as a tui.toast.show event so the `./tui` plugin (which renders a
+  // spinner in the session_prompt_right slot) can observe start/stop, and a
+  // toast is surfaced in the TUI for contexts without the TUI plugin.
+  const result = client.tui?.publish?.({
+    body: {
+      type: "tui.toast.show",
+      properties: { title: "kilo-openrouter-vision", message, variant },
+    },
+    query: { directory },
+  })
+  if (result && typeof (result as Promise<unknown>).catch === "function") {
+    void (result as Promise<unknown>).catch(() => {})
+  }
 }
 
 export async function describeImage({
@@ -315,13 +342,21 @@ function errorPart(image: ImagePart, error: unknown): TextPart {
   }
 }
 
+function descriptionFailed(part: TextPart): boolean {
+  return (
+    (part.metadata as
+      | { openRouterVision?: { error?: boolean } }
+      | undefined)?.openRouterVision?.error === true
+  )
+}
+
 export function createOpenRouterVisionPlugin(
   dependencies: PluginDependencies = {},
 ): Plugin {
   const fetchImpl = dependencies.fetchImpl ?? fetch
   const env = dependencies.env ?? process.env
 
-  return async ({ client }, rawOptions) => {
+  return async ({ client, directory }, rawOptions) => {
     const options = resolveOptions(rawOptions)
 
     return {
@@ -353,6 +388,15 @@ export function createOpenRouterVisionPlugin(
 
         const context = userContext(output.parts)
         const apiKey = resolveApiKey(options, env)
+        const start = performance.now()
+        if (options.showProgress) {
+          publishProgress(
+            client,
+            directory,
+            "info",
+            `Describing ${images.length === 1 ? "an image" : `${images.length} images`} via ${options.model}…`,
+          )
+        }
         const replacements = await Promise.all(
           images.map(async ({ part, index }) => {
             try {
@@ -377,6 +421,28 @@ export function createOpenRouterVisionPlugin(
 
         for (const replacement of replacements) {
           output.parts[replacement.index] = replacement.part
+        }
+
+        if (options.showProgress) {
+          const failed = replacements.filter((replacement) =>
+            descriptionFailed(replacement.part),
+          ).length
+          const seconds = ((performance.now() - start) / 1000).toFixed(1)
+          if (failed > 0) {
+            publishProgress(
+              client,
+              directory,
+              "warning",
+              `Image description failed for ${failed} of ${replacements.length} image(s) in ${seconds}s.`,
+            )
+          } else {
+            publishProgress(
+              client,
+              directory,
+              "success",
+              `Image description ready in ${seconds}s.`,
+            )
+          }
         }
       },
     }
